@@ -1,0 +1,536 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="theme-color" content="#0b1220" />
+<title>美股資金輪動每日 SOP</title>
+<style>
+:root{--bg:#0b1220;--card:#172033;--line:#2a3650;--text:#e8eefc;--muted:#93a0bb;--good:#34d399;--bad:#f87171;--chip:#243049}
+*{box-sizing:border-box}
+body{margin:0;font-family:"Noto Sans TC","PingFang HK","Microsoft JhengHei",sans-serif;background:radial-gradient(1200px 600px at 10% -10%,#1b2b4a 0%,var(--bg) 45%);color:var(--text);min-height:100vh}
+header{position:sticky;top:0;z-index:20;background:rgba(11,18,32,.94);backdrop-filter:blur(10px);border-bottom:1px solid var(--line);padding:12px 14px}
+h1{font-size:17px;margin:0}
+.sub{color:var(--muted);font-size:12px;margin-top:3px;line-height:1.4}
+nav{display:flex;gap:8px;margin-top:10px;overflow-x:auto}
+nav button,.btn{background:var(--chip);color:var(--text);border:1px solid var(--line);border-radius:999px;padding:8px 12px;font-size:13px;cursor:pointer;white-space:nowrap}
+nav button.active,.btn.primary{background:#2563eb;border-color:#60a5fa}
+.wrap{padding:14px;max-width:980px;margin:0 auto}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:12px;margin-bottom:10px}
+.k{color:var(--muted);font-size:11px;line-height:1.45}
+.v{font-size:20px;font-weight:700;letter-spacing:-.02em}
+.up{color:var(--good)}.dn{color:var(--bad)}
+.step{display:flex;align-items:center;gap:8px;margin:4px 0 10px}
+.badge{min-width:64px;text-align:center;background:#1e3a8a;color:#bfdbfe;border-radius:999px;font-size:11px;padding:4px 8px}
+table{width:100%;border-collapse:collapse;font-size:11.5px}
+th,td{padding:7px 5px;text-align:left;border-bottom:1px solid var(--line);vertical-align:top}
+th{color:var(--muted)}
+.tag{display:inline-block;padding:2px 7px;border-radius:999px;font-size:11px;background:var(--chip);margin:1px 2px 1px 0}
+.tag.ok{background:#064e3b;color:#6ee7b7}
+.tag.warn{background:#78350f;color:#fde68a}
+.tag.bad{background:#7f1d1d;color:#fecaca}
+.tag.watch{background:#1e3a8a;color:#bfdbfe}
+.check{font-size:12px;margin:5px 0;color:#d1d5db}
+.on{color:#6ee7b7}.off{color:#fca5a5}
+.cal{display:grid;grid-template-columns:repeat(7,1fr);gap:4px}
+.day,.dow{text-align:center;font-size:11px;padding:8px 0;border-radius:8px}
+.dow{color:var(--muted)}
+.day{background:#101827}
+.day.has{background:#1d4ed8;cursor:pointer}
+.day.today{outline:1px solid #7dd3fc}
+.day.muted{color:#4b5563}
+textarea,input{width:100%;background:#0f172a;color:var(--text);border:1px solid var(--line);border-radius:10px;padding:9px;font-size:13px}
+.row{display:flex;gap:8px;flex-wrap:wrap}
+.note{color:var(--muted);font-size:12px;line-height:1.55}
+.stock{padding:8px 0;border-bottom:1px solid var(--line)}
+.hidden{display:none}
+pre{white-space:pre-wrap;font-size:12px;line-height:1.5}
+footer{padding:8px 14px 36px;color:var(--muted);font-size:11px;text-align:center}
+.mini{font-size:11px;color:var(--muted);margin-top:4px;line-height:1.45}
+</style>
+</head>
+<body>
+<header>
+  <h1>美股資金輪動每日 SOP</h1>
+  <div class="sub">價格區間係分析框架，唔係買賣建議 · 指數用現貨點數，板塊／選股用 ETF 同個股收市價</div>
+  <nav>
+    <button class="tab-btn active" data-tab="dash">今日報告</button>
+    <button class="tab-btn" data-tab="cal">日曆記錄</button>
+    <button class="tab-btn" data-tab="run">新增查詢</button>
+    <button class="tab-btn" data-tab="sop">SOP 規則</button>
+  </nav>
+</header>
+<div class="wrap">
+<section id="dash"></section>
+<section id="cal" class="hidden"></section>
+<section id="run" class="hidden">
+  <div class="card">
+    <b>叫 App 執行分析</b>
+    <p class="note">唔使打字 prompt。揀你想查嘅<b>日曆日</b>（例如今日 20 號），撳藍色掣就會跑 SOP。<br>如果嗰日係周末／美股假期，App 會自動用上一個交易日收市做「分析基準日」。</p>
+    <div class="k" style="margin-top:8px">日曆日（你想查邊日）</div>
+    <input id="runDate" type="date" value="2026-09-20" />
+    <div id="sessionHint" class="note" style="margin-top:8px"></div>
+    <div class="k" style="margin-top:8px">備註（可改）</div>
+    <textarea id="runNote" rows="3">今日 9/20 周日休市。分析基準日自動用 9/18 收市。</textarea>
+    <div class="k" style="margin-top:12px">遠端資料網址（N8N／Gist／API 輸出嘅 latest.json）</div>
+    <input id="feedUrl" type="url" value="data/latest.json" placeholder="data/latest.json" />
+    <div class="row" style="margin-top:10px">
+      <button class="btn primary" onclick="runAnalysis()">執行分析並存日曆</button>
+      <button class="btn" onclick="loadRemoteFeed()">由遠端更新報價</button>
+      <button class="btn" onclick="exportAll()">匯出 JSON</button>
+      <button class="btn" onclick="document.getElementById('imp').click()">匯入 JSON</button>
+      <input id="imp" type="file" accept="application/json" class="hidden" onchange="importAll(event)" />
+    </div>
+    <p class="note" id="feedStatus">預設讀 data/latest.json。GitHub Actions 每日會覆蓋呢份檔。</p>
+  </div>
+</section>
+<section id="sop" class="hidden">
+<div class="card"><b>完整 SOP 流程</b>
+<pre>運行時點：美東 08:30 前完成（港時約 20:30 前）
+資料截止：前一交易日收市 + 當日期貨／盤前
+
+步驟 1｜必採數據（缺一項就標「數據不足」）
+指數：道指、標普500、納指、羅素2000、等權重標普(RSP)、VIX、費半SOX
+記錄：昨收、1D / 1W / 1M / 3M / YTD
+11 板塊 ETF：1D/1W/1M/3M/YTD/1Y、相對 SPY、近 20 日相對強弱
+宏觀：GDP、PCE／核心PCE、CPI、失業率、非農、初領、聯邦基金、10Y、2s10s、ISM
+特殊事件：Fed、財報、地緣／油價、大型業績、板塊資金流
+
+步驟 2｜景氣階段 × 市場階段（用規則）
+擴張後期：GDP 仍正但放緩、通脹黏、利率高位／有再緊可能、商品強
+牛市中後段：三大指數距 52 週高 &lt;8%，VIX&lt;20
+牛市擴散：破前高且羅素、等權重轉強（而家未符合）
+
+步驟 3｜雙軌評分
+T 理論分：該階段歷史領先 8–10；中性 5–6；落後 2–4；特殊因子最多 ±2
+F 事實分：YTD相對SPY 30% + 3M 30% + 1M 25% + 廣度／資金流 15%
+S = 0.4T + 0.6F
+
+步驟 4｜四分類
+|T−F|≤1.5 預計正確
+T高F低 理想化／未到部署
+|T−F|≥2.5 與現實不符
+S≥7 且 1M或3M相對SPY為正 → 可立即關注
+
+步驟 5｜前三板塊各 10 股
+優先：ETF 權重前段 + 流動性；近 1–3 個月相對板塊不弱；有可說驅動
+避開：即將大缺口、訴訟、明顯業績崩壞
+買入下沿＝近1個月低點與20日線較低者附近（約 −6% 至 −12%）
+買入上沿＝現價至 +3%
+目標＝近1–3個月高或現價 +8% 至 +18%
+失效＝買入下沿再破 4–6%
+
+步驟 6｜固定輸出
+三大指數現況 + 階段｜11板塊評分＋分類｜輪動結論｜前三板塊各10股｜風險開關</pre>
+</div>
+</section>
+</div>
+<footer>非投資建議。指數現貨：2026-09-18 官方收市。板塊同個股：同期交易日收市。歷史只存在本機瀏覽器。</footer>
+<script>
+const AS_OF = "2026-09-18";
+const VIX = {c:14.81,d1:-4.08,w1:-6.50};
+
+const IDX = [
+  {name:"標普500", code:"SPX", c:7650.50, d1:0.17, w1:-0.08, m1:-0.96, m3:2.00, ytd:11.76, pct:-2.13, hi52:7816.70},
+  {name:"納斯達克綜合", code:"COMP", c:26522.55, d1:0.39, w1:0.72, m1:0.75, m3:-2.59, ytd:14.11, pct:-2.46, hi52:27190.21},
+  {name:"道瓊斯工業", code:"DJIA", c:51682.64, d1:-0.18, w1:-1.69, m1:-3.44, m3:0.07, ytd:7.53, pct:-5.59, hi52:54744.33},
+  {name:"羅素2000", code:"RUT", c:2860.40, d1:-0.50, w1:-1.50, m1:-5.84, m3:-3.89, ytd:15.25, pct:-6.82, hi52:3069.71},
+  {name:"納指100", code:"NDX", c:29644.17, d1:0.67, w1:0.94, m1:0.75, m3:-2.59, ytd:17.40, pct:-3.63, hi52:30762.20},
+  {name:"費半 SOX", code:"SOX", c:11921.69, d1:2.78, w1:0.83, m1:2.58, m3:-16.64, ytd:68.31, pct:-18.65, hi52:14655.29}
+];
+
+const ETF = {
+  SPY:{c:761.69,d1:-0.12,w1:-0.34,m1:-0.96,m3:2.00,ytd:11.70,y1:15.01,pct:-2.27},
+  QQQ:{c:721.45,d1:0.63,w1:0.92,m1:0.75,m3:-2.59,ytd:17.44,y1:21.19,pct:-3.63},
+  DIA:{c:515.88,d1:-0.48,w1:-1.88,m1:-3.44,m3:0.07,ytd:7.35,y1:11.51,pct:-5.65},
+  IWM:{c:284.10,d1:-0.47,w1:-1.66,m1:-5.84,m3:-3.89,ytd:15.41,y1:16.03,pct:-6.91},
+  RSP:{c:212.29,d1:-0.48,w1:-1.20,m1:-4.40,m3:1.11,ytd:10.82,y1:12.00,pct:-4.99},
+  SOXX:{c:533.07,d1:2.69,w1:1.14,m1:2.58,m3:-16.64,ytd:77.01,y1:99.23,pct:-18.73}
+};
+
+const SECTORS = [
+  {id:"XLK",name:"科技",tBase:5,tAdj:2,tWhy:"後期教科書唔領先，AI capex +2",c:189.60,d1:0.82,w1:1.03,m1:3.25,m3:-0.96,ytd:31.69,y1:37.33,lo1m:178.82,sma20:185.37,hi1m:189.81,hi3m:194.30,flow:8},
+  {id:"XLE",name:"能源",tBase:9,tAdj:0,tWhy:"擴張後期理論領先",c:64.31,d1:-0.26,w1:-1.27,m1:1.15,m3:19.60,ytd:43.84,y1:43.37,lo1m:61.31,sma20:64.11,hi1m:66.17,hi3m:66.17,flow:8},
+  {id:"XLV",name:"醫療",tBase:6,tAdj:0,tWhy:"後期中性偏防禦",c:168.39,d1:-0.25,w1:1.83,m1:-4.15,m3:12.71,ytd:8.78,y1:22.49,lo1m:165.11,sma20:170.29,hi1m:176.60,hi3m:176.60,flow:6},
+  {id:"XLB",name:"原物料",tBase:8,tAdj:-1,tWhy:"理論領先，近月未確認 −1",c:49.99,d1:-1.42,w1:-1.88,m1:-4.82,m3:-3.51,ytd:10.23,y1:10.03,lo1m:49.88,sma20:52.04,hi1m:54.19,hi3m:54.19,flow:4},
+  {id:"XLF",name:"金融",tBase:5,tAdj:-1,tWhy:"再加息預期壓抑",c:55.86,d1:-0.04,w1:-2.43,m1:-2.82,m3:4.27,ytd:1.99,y1:3.20,lo1m:55.44,sma20:57.38,hi1m:58.60,hi3m:58.60,flow:4},
+  {id:"XLI",name:"工業",tBase:5,tAdj:0,tWhy:"中期領先、後期轉中性",c:169.75,d1:0.44,w1:-1.52,m1:-6.71,m3:-6.17,ytd:9.43,y1:11.13,lo1m:167.49,sma20:173.99,hi1m:184.62,hi3m:188.19,flow:3},
+  {id:"XLP",name:"必需消費",tBase:6,tAdj:0,tWhy:"後期／衰退初期防禦",c:82.80,d1:-0.83,w1:-0.70,m1:-4.32,m3:-0.60,ytd:6.59,y1:4.10,lo1m:82.80,sma20:84.68,hi1m:87.47,hi3m:88.78,flow:4},
+  {id:"XLC",name:"通訊",tBase:4,tAdj:0,tWhy:"早周期領先，後期偏落後",c:110.81,d1:-1.37,w1:-1.59,m1:-0.46,m3:1.24,ytd:-5.87,y1:-6.82,lo1m:110.25,sma20:112.29,hi1m:115.26,hi3m:115.26,flow:5},
+  {id:"XLRE",name:"房地產",tBase:4,tAdj:0,tWhy:"高利率環境落後",c:42.53,d1:-0.95,w1:-2.05,m1:-5.47,m3:-3.03,ytd:5.40,y1:1.12,lo1m:42.50,sma20:43.92,hi1m:45.47,hi3m:46.46,flow:3},
+  {id:"XLY",name:"非必需消費",tBase:3,tAdj:0,tWhy:"早周期領先，後期落後",c:111.03,d1:-0.32,w1:-1.71,m1:-6.37,m3:-5.23,ytd:-7.02,y1:-7.66,lo1m:109.63,sma20:114.48,hi1m:119.06,hi3m:120.44,flow:3},
+  {id:"XLU",name:"公用",tBase:6,tAdj:-1,tWhy:"防禦中性，利率 5% 打壓 −1",c:41.10,d1:-1.42,w1:-3.04,m1:-6.63,m3:-8.18,ytd:-3.72,y1:-2.62,lo1m:41.08,sma20:42.54,hi1m:44.38,hi3m:46.63,flow:2}
+];
+
+const STOCKS = {
+  XLK:[
+    ["AAPL","Apple",336.13,-0.26,307.01,322.64,344.57,"XLK 最大權重；近月相對強"],
+    ["NVDA","NVIDIA",222.27,1.34,207.25,218.88,234.76,"AI GPU／資本開支主軸"],
+    ["MSFT","Microsoft",493.78,-0.80,478.53,497.51,517.78,"雲＋AI，近月穩"],
+    ["AVGO","Broadcom",357.61,2.97,335.81,359.32,432.73,"ASIC／網絡，波動大"],
+    ["AMD","AMD",559.82,2.70,440.50,490.75,584.73,"GPU 近月明顯轉強"],
+    ["MU","Micron",1015.80,3.92,887.61,959.60,1255.00,"HBM／記憶體＋AI"],
+    ["PLTR","Palantir",177.64,0.79,164.55,175.90,188.37,"政企 AI 訂單主題"],
+    ["ANET","Arista",199.39,-0.07,181.27,193.82,214.89,"數據中心網絡"],
+    ["CSCO","Cisco",109.51,-0.66,107.36,110.01,124.71,"網絡設備高權重"],
+    ["AMAT","Applied Materials",444.57,6.51,411.51,454.23,739.67,"半導體設備，波動高"]
+  ],
+  XLE:[
+    ["XOM","Exxon Mobil",163.54,0.17,155.32,162.66,169.64,"一體化龍頭，油價彈性"],
+    ["CVX","Chevron",209.51,-0.97,197.82,208.60,217.78,"一體化，近季強"],
+    ["COP","ConocoPhillips",131.83,-1.02,128.00,134.39,141.62,"上游產量彈性"],
+    ["MPC","Marathon Petroleum",424.89,0.69,347.67,387.32,428.00,"煉油價差強"],
+    ["VLO","Valero",413.28,0.18,335.00,373.37,416.66,"煉油，近季領先"],
+    ["PSX","Phillips 66",273.13,-0.39,233.55,254.20,277.12,"煉油／中游"],
+    ["EOG","EOG Resources",144.23,-0.85,142.76,147.02,154.16,"頁岩油高權重"],
+    ["WMB","Williams",72.05,0.33,69.60,73.17,78.99,"中游管線"],
+    ["KMI","Kinder Morgan",31.84,1.69,30.41,31.41,33.34,"中游，息率防禦"],
+    ["TRGP","Targa Resources",292.19,2.50,281.09,291.03,307.94,"天然氣液體中游"]
+  ],
+  XLV:[
+    ["LLY","Eli Lilly",1152.93,0.04,1113.29,1163.31,1292.65,"減重藥管線"],
+    ["JNJ","J&J",269.99,-0.09,260.68,269.76,281.07,"綜合醫療龍頭"],
+    ["ABBV","AbbVie",263.96,-0.02,246.77,259.69,267.47,"免疫／管線"],
+    ["UNH","UnitedHealth",376.90,0.45,372.42,390.30,461.62,"保險龍頭，回撤中"],
+    ["MRK","Merck",146.87,-0.19,142.32,148.74,156.92,"製藥，近季強"],
+    ["TMO","Thermo Fisher",651.45,-1.04,594.82,623.30,663.57,"生命科學工具"],
+    ["AMGN","Amgen",385.65,1.55,374.46,413.53,447.03,"生物製藥權重"],
+    ["GILD","Gilead",150.11,-0.52,142.94,147.73,153.23,"抗病毒／管線"],
+    ["ISRG","Intuitive Surgical",393.33,2.55,345.25,371.81,443.84,"手術機械人"],
+    ["PFE","Pfizer",27.66,0.07,27.25,28.06,29.21,"高權重製藥，彈性較低"]
+  ]
+};
+
+const MACRO = {
+  items:[
+    ["GDP","Q2 2026 實質 GDP +1.5% SAAR，仍正但放緩"],
+    ["CPI / PCE","CPI YoY 3.4%（8月）；PCE／核心仍然偏黏"],
+    ["失業／非農","失業率 4.1%；8月非農約 +16.2 萬"],
+    ["初領","未見急升（用最新公布；唔當即時日更）"],
+    ["聯邦基金","9/16 FOMC 後 3.75–4.00%；市場定價 10 月再加一碼約五成"],
+    ["10Y / 2s10s","10 年期約 5.00%；曲線走平，未出現深度倒掛後急陡"],
+    ["ISM","製造 8 月約 54.6，仍擴張"]
+  ],
+  events:"剛過 9 月 FOMC／點陣圖；10Y 重回 5%；油價高位回吐；AI 安全議題令半導體上週波動；標普只有約 19% 成份股站上 20 日線；Fear & Greed 29。"
+};
+
+function clamp(n,a,b){return Math.max(a,Math.min(b,n))}
+function relScore(x){if(x>=12)return 9.5;if(x>=6)return 8.2;if(x>=3)return 7.2;if(x>=0)return 6.0;if(x>=-3)return 5.0;if(x>=-8)return 3.6;return 2.4}
+function pct(n){return (n>=0?"+":"")+Number(n).toFixed(2)+"%"}
+function cls(n){return n>=0?"up":"dn"}
+function fmt(n){return Number(n).toLocaleString("en-US",{minimumFractionDigits:2,maximumFractionDigits:2})}
+
+function analyze(){
+  const spy=ETF.SPY;
+  return SECTORS.map(s=>{
+    const ytdR=s.ytd-spy.ytd, m3R=s.m3-spy.m3, m1R=s.m1-spy.m1;
+    const T=clamp(s.tBase+s.tAdj,1,10);
+    const F=+(0.30*relScore(ytdR)+0.30*relScore(m3R)+0.25*relScore(m1R)+0.15*s.flow).toFixed(1);
+    const S=+(0.4*T+0.6*F).toFixed(1);
+    const diff=Math.abs(T-F);
+    let cat="預計正確";
+    if(S>=7 && (m1R>0||m3R>0)) cat="可立即關注";
+    else if(T-F>=2.0 && F<6) cat="理想化／未到部署";
+    else if(diff>=2.5) cat="與現實不符";
+    return Object.assign({},s,{ytdR:ytdR,m3R:m3R,m1R:m1R,T:T,F:F,S:S,cat:cat,diff:diff});
+  }).sort((a,b)=>b.S-a.S);
+}
+
+function zone(px,lo1m,sma20,hi3m){
+  const floor=Math.min(lo1m,sma20);
+  return {
+    buyLo:+(floor*0.94).toFixed(2),
+    buyHi:+(px*1.03).toFixed(2),
+    tgt:+Math.max(hi3m,px*1.12).toFixed(2),
+    fail:+(floor*0.94*0.95).toFixed(2)
+  };
+}
+
+function catTag(cat){
+  if(cat==="可立即關注") return '<span class="tag ok">'+cat+"</span>";
+  if(cat==="與現實不符") return '<span class="tag bad">'+cat+"</span>";
+  if(cat==="理想化／未到部署") return '<span class="tag warn">'+cat+"</span>";
+  return '<span class="tag">'+cat+"</span>";
+}
+
+function lastSession(dateStr){
+  var d=new Date(dateStr+"T12:00:00");
+  var day=d.getDay();
+  if(day===0) d.setDate(d.getDate()-2);
+  if(day===6) d.setDate(d.getDate()-1);
+  var y=d.getFullYear();
+  var m=String(d.getMonth()+1).padStart(2,"0");
+  var dd=String(d.getDate()).padStart(2,"0");
+  return y+"-"+m+"-"+dd;
+}
+function weekdayName(dateStr){
+  return ["日","一","二","三","四","五","六"][new Date(dateStr+"T12:00:00").getDay()];
+}
+function updateSessionHint(){
+  var box=document.getElementById("sessionHint");
+  var input=document.getElementById("runDate");
+  if(!box||!input||!input.value) return;
+  var cal=input.value;
+  var sess=lastSession(cal);
+  if(cal===sess){
+    box.innerHTML='分析基準日＝<b>'+sess+'</b>（星期'+weekdayName(sess)+'，正常交易日）。而家報價快照仍然係 '+AS_OF+' 收市。';
+  }else{
+    box.innerHTML='日曆日 <b>'+cal+'</b> 係星期'+weekdayName(cal)+'，美股休市。<br>分析基準日自動改用 <b>'+sess+'</b>。報價快照仍然係 '+AS_OF+' 收市。';
+  }
+}
+function runAnalysis(){
+  var cal=document.getElementById("runDate").value;
+  if(!cal){alert("請先揀日期");return;}
+  var sess=lastSession(cal);
+  var note=document.getElementById("runNote").value;
+  if(cal!==sess){
+    note="【休市】日曆日 "+cal+"（星期"+weekdayName(cal)+"）· 分析基準日 "+sess+"。\n"+note;
+  }
+  var s=loadStore();
+  s[cal]={date:cal,session:sess,note:note,savedAt:new Date().toISOString(),snapshot:AS_OF};
+  saveStore(s);
+  showTab("dash");
+  renderDash(s[cal]);
+}
+function renderDash(report){
+  const rows=analyze();
+  const top=rows.slice(0,3);
+  const date=(report&&report.date)||AS_OF;
+  const sess=(report&&report.session)||lastSession(date);
+  const note=(report&&report.note)||"用 2026-09-18 收市執行完整 SOP。";
+
+  var html="";
+  html+='<div class="card"><div class="k">日曆日 · 你查詢嘅日子</div>';
+  html+='<div class="v" style="font-size:18px">'+date+"（星期"+weekdayName(date)+"）</div>";
+  html+='<div class="note" style="margin-top:6px">分析基準日：<b>'+sess+'</b>　報價快照：'+AS_OF+"</div>";
+  html+='<div class="note" style="margin-top:6px">'+note.replace(/\n/g,"<br>")+"</div>";
+  html+='<div style="margin-top:8px"><span class="tag warn">景氣：擴張後期</span>';
+  html+='<span class="tag watch">市場：牛市中後段／高位觀察</span>';
+  html+='<span class="tag">VIX '+VIX.c+"</span></div></div>";
+
+  html+='<div class="step"><span class="badge">步驟 1</span><b>必採數據</b></div>';
+  html+='<div class="card"><span class="tag ok">步驟1數據齊（現貨指數＋11板塊＋宏觀最新一次公布）</span>';
+  html+='<p class="note">下面大數字係<b>指數現貨點數</b>。之前 761.69 係 SPY ETF 價，唔係標普500，所以會睇落唔似現實。</p></div>';
+  html+='<div class="grid2">';
+  for(var i=0;i<IDX.length;i++){
+    var x=IDX[i];
+    html+='<div class="card"><div class="k">'+x.name+" · "+x.code+"</div>";
+    html+='<div class="v">'+fmt(x.c)+"</div>";
+    html+='<div class="'+cls(x.d1)+'">'+pct(x.d1)+" 日</div>";
+    html+='<div class="mini">1W '+pct(x.w1)+"　1M "+pct(x.m1)+"　3M "+pct(x.m3)+"<br>YTD "+pct(x.ytd)+"　距52週高 "+pct(x.pct)+"<br>52週高 "+fmt(x.hi52)+"</div></div>";
+  }
+  html+='<div class="card"><div class="k">VIX 波動率</div><div class="v">'+VIX.c.toFixed(2)+"</div>";
+  html+='<div class="'+cls(VIX.d1)+'">'+pct(VIX.d1)+" 日</div>";
+  html+='<div class="mini">1W '+pct(VIX.w1)+"　門檻：&lt;20 先符合高位牛市觀察<br>而家低波，但廣度差</div></div>";
+  html+='<div class="card"><div class="k">等權重標普 ETF · RSP</div><div class="v">'+fmt(ETF.RSP.c)+"</div>";
+  html+='<div class="'+cls(ETF.RSP.d1)+'">'+pct(ETF.RSP.d1)+" 日</div>";
+  html+='<div class="mini">1W '+pct(ETF.RSP.w1)+"　1M "+pct(ETF.RSP.m1)+"　3M "+pct(ETF.RSP.m3)+"<br>YTD "+pct(ETF.RSP.ytd)+"　距高 "+pct(ETF.RSP.pct)+"<br>用嚟判斷係咪擴散</div></div></div>";
+
+  html+='<div class="card"><b>對應 ETF（交易工具，唔好同指數點數撈亂）</b>';
+  html+='<div class="mini">SPY '+fmt(ETF.SPY.c)+"（"+pct(ETF.SPY.d1)+"）　QQQ "+fmt(ETF.QQQ.c)+"（"+pct(ETF.QQQ.d1)+"）　DIA "+fmt(ETF.DIA.c)+"（"+pct(ETF.DIA.d1)+"）　IWM "+fmt(ETF.IWM.c)+"（"+pct(ETF.IWM.d1)+"）　SOXX "+fmt(ETF.SOXX.c)+"（"+pct(ETF.SOXX.d1)+"）</div>";
+  html+='<p class="note">1M／3M 部分指數用對應 ETF 近似跟蹤。個位數差距來自股息同收市結算。</p></div>';
+
+  html+='<div class="card" style="overflow:auto"><b>11 板塊 ETF 必採欄</b><table><thead><tr><th>板塊</th><th>現價</th><th>1D</th><th>1W</th><th>1M</th><th>3M</th><th>YTD</th><th>1Y</th><th>vs SPY 1M</th></tr></thead><tbody>';
+  for(var j=0;j<SECTORS.length;j++){
+    var s=SECTORS[j];
+    var r=s.m1-ETF.SPY.m1;
+    html+="<tr><td>"+s.name+'<br><span class="k">'+s.id+"</span></td><td>"+s.c.toFixed(2)+"</td>";
+    html+='<td class="'+cls(s.d1)+'">'+pct(s.d1)+"</td>";
+    html+='<td class="'+cls(s.w1)+'">'+pct(s.w1)+"</td>";
+    html+='<td class="'+cls(s.m1)+'">'+pct(s.m1)+"</td>";
+    html+='<td class="'+cls(s.m3)+'">'+pct(s.m3)+"</td>";
+    html+='<td class="'+cls(s.ytd)+'">'+pct(s.ytd)+"</td>";
+    html+='<td class="'+cls(s.y1)+'">'+pct(s.y1)+"</td>";
+    html+='<td class="'+cls(r)+'">'+pct(r)+"</td></tr>";
+  }
+  html+="</tbody></table></div>";
+
+  html+='<div class="card"><b>宏觀（最新一次公布）</b>';
+  for(var m=0;m<MACRO.items.length;m++){
+    html+='<div class="check"><b>'+MACRO.items[m][0]+"：</b>"+MACRO.items[m][1]+"</div>";
+  }
+  html+='<div class="note" style="margin-top:6px">特殊事件開關：'+MACRO.events+"</div></div>";
+
+  html+='<div class="step"><span class="badge">步驟 2</span><b>判定景氣階段 × 市場階段</b></div>';
+  html+='<div class="card">';
+  html+='<div class="check on">✓ GDP 仍正但放緩（+1.5%）</div>';
+  html+='<div class="check on">✓ 通脹黏（CPI 3.4%／PCE 偏高）</div>';
+  html+='<div class="check on">✓ 利率高位，仲有再緊可能（9/16 加息後，10 月再加息定價升）</div>';
+  html+='<div class="check on">✓ 商品／能源相對強（XLE 3M +19.6%）</div>';
+  html+='<div class="check off">✗ 未符合衰退初期：失業未明顯升、GDP 未近 0</div>';
+  html+='<p class="note"><b>景氣階段＝擴張後期。</b>Stovall 理論領先：能源、原物料。</p>';
+  html+='<hr style="border:0;border-top:1px solid var(--line);margin:10px 0">';
+  html+='<div class="check on">✓ 標普距 52 週高 −2.13%（&lt;8%）</div>';
+  html+='<div class="check on">✓ 納指距高 −2.46%；VIX 14.81（&lt;20）</div>';
+  html+='<div class="check off">✗ 羅素距高 −6.82%，1M −5.8%，未轉強</div>';
+  html+='<div class="check off">✗ 等權重 RSP 1M −4.4%，廣度只有約 19% 站上 20 日線</div>';
+  html+='<p class="note"><b>市場階段＝牛市中後段（Market Top 觀察區），不是牛市擴散。</b>錢集中喺主題，唔係全面進攻。</p></div>';
+
+  html+='<div class="step"><span class="badge">步驟 3–4</span><b>雙軌評分 + 四分類</b></div>';
+  html+='<div class="card" style="overflow:auto"><table><thead><tr><th>板塊</th><th>T</th><th>F</th><th>S</th><th>1M vsSPY</th><th>3M vsSPY</th><th>YTD vsSPY</th><th>分類</th></tr></thead><tbody>';
+  for(var k=0;k<rows.length;k++){
+    var rr=rows[k];
+    html+="<tr><td>"+rr.name+'<div class="k">'+rr.id+" "+rr.tWhy+"</div></td>";
+    html+="<td>"+rr.T.toFixed(1)+"</td><td>"+rr.F.toFixed(1)+"</td><td><b>"+rr.S.toFixed(1)+"</b></td>";
+    html+='<td class="'+cls(rr.m1R)+'">'+pct(rr.m1R)+"</td>";
+    html+='<td class="'+cls(rr.m3R)+'">'+pct(rr.m3R)+"</td>";
+    html+='<td class="'+cls(rr.ytdR)+'">'+pct(rr.ytdR)+"</td>";
+    html+="<td>"+catTag(rr.cat)+"</td></tr>";
+  }
+  html+='</tbody></table><p class="note">S＝0.4×T＋0.6×F。事實權重較高，避免死守週期教科書。原物料 T 高但 F 低＝理想化／未到部署。</p></div>';
+
+  html+='<div class="step"><span class="badge">步驟 5</span><b>前三板塊各 10 股（框架區間）</b></div>';
+  for(var t=0;t<top.length;t++){
+    var sec=top[t];
+    var ez=zone(sec.c,sec.lo1m,sec.sma20,sec.hi3m);
+    var list=STOCKS[sec.id]||[];
+    html+='<div class="card"><b>'+sec.name+" "+sec.id+"</b>　S "+sec.S+"　"+catTag(sec.cat);
+    html+='<div class="note">ETF 現價 '+sec.c.toFixed(2)+"（"+AS_OF+"）· 買入區 "+ez.buyLo+"–"+ez.buyHi+" · 目標／減倉 "+ez.tgt+" · 失效觀察 "+ez.fail+"</div>";
+    for(var p=0;p<list.length;p++){
+      var st=list[p];
+      var z=zone(st[2],st[4],st[5],st[6]);
+      html+='<div class="stock"><b>'+st[0]+"</b> "+st[1];
+      html+="<div>現價 "+fmt(st[2])+'　<span class="'+cls(st[3])+'">'+pct(st[3])+' 日</span>　<span class="k">'+AS_OF+"</span></div>";
+      html+='<div class="k">買入 '+fmt(z.buyLo)+"–"+fmt(z.buyHi)+"　目標 "+fmt(z.tgt)+"　失效 "+fmt(z.fail)+"</div>";
+      html+='<div class="k">'+st[7]+"</div></div>";
+    }
+    html+="</div>";
+  }
+
+  html+='<div class="step"><span class="badge">步驟 6</span><b>輪動結論 + 風險開關</b></div>';
+  html+='<div class="card"><b>錢從邊來、到邊去</b>';
+  html+='<p class="note">從廣度差嘅週期股流出：工業、金融、非必需、公用、地產近 1 個月明顯跑輸。短線回流科技／費半反彈（SOX +2.8%，XLK 1M 相對 SPY 正）。中線仍然泊能源（3M 大幅跑贏）同醫療（3M 相對強但 1M 回吐）。原物料理論上應該同能源一齊領，但近月未確認，所以只標「理想化／未到部署」，唔升級做可立即關注。</p>';
+  html+='<p class="note">前三按合成分：'+top.map(function(x){return x.name+" "+x.S}).join("、")+"。</p></div>";
+  html+='<div class="card"><b>今日風險開關</b>';
+  html+='<div class="check">Fed：剛加息，10 月再加一碼概率上升</div>';
+  html+='<div class="check">利率：10Y = 5.00%，打壓公用／地產／久期</div>';
+  html+='<div class="check">油價：高位回吐，能源短線震、中線未破</div>';
+  html+='<div class="check">廣度：標普約 19% 站上 20 日線，高位但內部弱</div>';
+  html+='<div class="check">主題：AI 安全議題令半導體上週波動，費半距高仍約 −19%</div>';
+  html+='<p class="note">區間只供框架，不是投資建議。</p></div>';
+
+  document.getElementById("dash").innerHTML=html;
+}
+
+function applyFeed(feed){
+  if(!feed||typeof feed!=="object") return false;
+  if(feed.vix) Object.assign(VIX,feed.vix);
+  if(Array.isArray(feed.indices)&&feed.indices.length){
+    IDX.length=0;
+    feed.indices.forEach(function(x){IDX.push(x)});
+  }
+  if(feed.etf) Object.assign(ETF,feed.etf);
+  if(Array.isArray(feed.sectors)&&feed.sectors.length){
+    SECTORS.length=0;
+    feed.sectors.forEach(function(x){SECTORS.push(x)});
+  }
+  if(feed.macro){
+    if(feed.macro.items) MACRO.items=feed.macro.items;
+    if(feed.macro.events) MACRO.events=feed.macro.events;
+  }
+  var st=document.getElementById("feedStatus");
+  if(st) st.textContent="已載入遠端資料 · 基準日 "+(feed.session_date||"?")+" · 來源 "+(feed.source||"api");
+  return true;
+}
+function loadRemoteFeed(){
+  var input=document.getElementById("feedUrl");
+  var url=input&&input.value.trim();
+  if(!url){alert("請先貼上 N8N／Gist／API 嘅 JSON 網址");return Promise.resolve(false);}
+  localStorage.setItem("sop_feed_url",url);
+  var st=document.getElementById("feedStatus");
+  if(st) st.textContent="正在拉取遠端資料…";
+  return fetch(url,{cache:"no-store"}).then(function(r){
+    if(!r.ok) throw new Error("HTTP "+r.status);
+    return r.json();
+  }).then(function(feed){
+    if(!applyFeed(feed)) throw new Error("JSON 格式唔啱");
+    var cal=feed.calendar_date||document.getElementById("runDate").value;
+    var note=feed.note||"由遠端 JSON 更新";
+    document.getElementById("runNote").value=note;
+    var s=loadStore();
+    s[cal]={date:cal,session:feed.session_date||lastSession(cal),note:note,savedAt:new Date().toISOString(),snapshot:feed.session_date||AS_OF,source:feed.source||"remote"};
+    saveStore(s);
+    renderDash(s[cal]);
+    showTab("dash");
+    return true;
+  }).catch(function(err){
+    if(st) st.textContent="未讀到 latest.json，沿用內置快照："+err.message;
+    if(url.indexOf("http")===0) alert("拉唔到遠端資料。沿用內置快照。\n"+err.message);
+    return false;
+  });
+}
+function loadStore(){try{return JSON.parse(localStorage.getItem("sop_runs_v2")||"{}")}catch(e){return{}}}
+function saveStore(o){localStorage.setItem("sop_runs_v2",JSON.stringify(o))}
+function seedIfEmpty(){
+  var s=loadStore();
+  if(!s[AS_OF]){
+    s[AS_OF]={date:AS_OF,savedAt:new Date().toISOString(),note:"完整 SOP 首份：指數改用現貨點數。標普 7650.50（+0.17%），道指 51682.64（-0.18%），納指 26522.55（+0.39%）。"};
+    saveStore(s);
+  }
+}
+function renderCal(){
+  var store=loadStore();
+  var y=2026,m=8;
+  var startDow=new Date(y,m,1).getDay();
+  var days=new Date(y,m+1,0).getDate();
+  var names=["日","一","二","三","四","五","六"];
+  var html='<div class="card"><b>2026 年 9 月</b><p class="note">藍色格＝已有查詢記錄。</p><div class="cal">';
+  html+=names.map(function(n){return '<div class="dow">'+n+"</div>"}).join("");
+  for(var i=0;i<startDow;i++) html+='<div class="day muted"></div>';
+  for(var d=1;d<=days;d++){
+    var key=y+"-09-"+String(d).padStart(2,"0");
+    html+='<div class="day '+(store[key]?"has":"")+(key==="2026-09-20"?" today":"")+'" onclick="openDay(\''+key+"')\">"+d+"</div>";
+  }
+  html+='</div></div><div class="card"><b>全部記錄</b>';
+  Object.keys(store).sort().reverse().forEach(function(k){
+    html+='<div class="stock"><b>'+k+'</b><div class="k">'+(store[k].note||"")+"</div>";
+    html+='<button class="btn" onclick="openDay(\''+k+'\')">打開</button> ';
+    html+='<button class="btn" onclick="delDay(\''+k+"')\">刪除</button></div>";
+  });
+  html+="</div>";
+  document.getElementById("cal").innerHTML=html;
+}
+function openDay(key){
+  var rec=loadStore()[key];
+  if(!rec){alert(key+" 未有記錄");return;}
+  showTab("dash"); renderDash(rec);
+}
+function delDay(key){var s=loadStore();delete s[key];saveStore(s);renderCal()}
+function saveCurrentRun(){
+  var date=document.getElementById("runDate").value;
+  var note=document.getElementById("runNote").value;
+  var s=loadStore();
+  s[date]={date:date,note:note,savedAt:new Date().toISOString(),snapshot:AS_OF};
+  saveStore(s); alert("已存："+date); renderCal(); showTab("cal");
+}
+function exportAll(){
+  var a=document.createElement("a");
+  a.href=URL.createObjectURL(new Blob([JSON.stringify(loadStore(),null,2)],{type:"application/json"}));
+  a.download="us-rotation-sop-history.json"; a.click();
+}
+function importAll(e){
+  var f=e.target.files[0]; if(!f) return;
+  var r=new FileReader();
+  r.onload=function(){saveStore(JSON.parse(r.result));renderCal();alert("已匯入")};
+  r.readAsText(f);
+}
+function showTab(id){
+  ["dash","cal","run","sop"].forEach(function(t){document.getElementById(t).classList.toggle("hidden",t!==id)});
+  document.querySelectorAll(".tab-btn").forEach(function(b){b.classList.toggle("active",b.dataset.tab===id)});
+  if(id==="cal") renderCal();
+}
+document.querySelectorAll(".tab-btn").forEach(function(b){b.addEventListener("click",function(){showTab(b.dataset.tab)})});
+var dateInput=document.getElementById("runDate");
+if(dateInput){dateInput.addEventListener("change",updateSessionHint);updateSessionHint();}
+var feedInput=document.getElementById("feedUrl");
+var savedFeed=localStorage.getItem("sop_feed_url") || "data/latest.json";
+if(feedInput){feedInput.value=savedFeed;}
+seedIfEmpty();
+loadRemoteFeed().then(function(ok){
+  if(!ok) renderDash(loadStore()["2026-09-20"]||loadStore()[AS_OF]);
+});
+
+</script>
+</body>
+</html>
