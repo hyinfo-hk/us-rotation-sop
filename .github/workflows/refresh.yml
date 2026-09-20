@@ -1,0 +1,35 @@
+name: Refresh SOP market data
+
+on:
+  schedule:
+    - cron: "20 12 * * 1-5"
+    - cron: "10 21 * * 1-5"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install
+        run: pip install -r requirements.txt
+      - name: Fetch prices
+        run: python scripts/fetch_data.py --out data/latest.json
+      - name: Commit if changed
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add data/latest.json
+          if git diff --staged --quiet; then
+            echo "No data change"
+          else
+            git commit -m "chore: refresh latest.json"
+            git push
+          fi
