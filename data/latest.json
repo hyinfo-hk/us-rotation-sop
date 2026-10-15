@@ -2,12 +2,12 @@
   "schema": "us-rotation-sop/v1",
   "calendar_date": "2026-10-15",
   "session_date": "2026-10-14",
-  "generated_at": "2026-10-15T05:33:17.925645+08:00",
+  "generated_at": "2026-10-15T21:03:04.802195+08:00",
   "source": "github-actions-yfinance",
   "vix": {
-    "c": 16.87,
-    "d1": 10.48,
-    "w1": 11.87
+    "c": 17.47,
+    "d1": 3.56,
+    "w1": 13.37
   },
   "indices": [
     {
