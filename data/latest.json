@@ -2,7 +2,7 @@
   "schema": "us-rotation-sop/v1",
   "calendar_date": "2026-11-24",
   "session_date": "2026-11-23",
-  "generated_at": "2026-11-24T07:58:42.487644+08:00",
+  "generated_at": "2026-11-24T13:17:23.558159+08:00",
   "source": "github-actions-yfinance",
   "vix": {
     "c": 26.62,
@@ -250,7 +250,7 @@
       "m3": -2.96,
       "ytd": 36.56,
       "y1": 37.73,
-      "lo1m": 59.74,
+      "lo1m": 59.75,
       "sma20": 64.13,
       "hi1m": 70.15,
       "hi3m": 70.15,
